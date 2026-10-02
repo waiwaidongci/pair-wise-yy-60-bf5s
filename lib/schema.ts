@@ -28,6 +28,18 @@ export const evidenceResponseSchema = z.object({
     owner: z.string(),
     status: z.enum(['待核验', '复核中', '已核验', '需补证']),
     revision: z.number()
+  })),
+  snapshots: z.array(z.object({
+    id: z.string(),
+    recordId: z.string(),
+    version: z.number(),
+    activity: z.number(),
+    unit: z.string(),
+    factor: z.number(),
+    factorUnit: z.string(),
+    timeRange: z.string(),
+    conversionBasis: z.string(),
+    capturedAt: z.string()
   }))
 });
 
