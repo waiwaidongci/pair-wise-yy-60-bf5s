@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { evidenceResponseSchema } from '@/lib/schema';
+import { batchResultSchema, evidenceResponseSchema } from '@/lib/schema';
 
 const data = {
   project: {
@@ -25,15 +25,42 @@ const data = {
   ]
 };
 
+// 正式证据链接收台账：按批次号记录已确认编号，恢复时跳过，已确认记录不重复写入
+const confirmedByBatch = new Map<string, Set<string>>();
+
 export async function GET() {
   return NextResponse.json(evidenceResponseSchema.parse(data));
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { recordId?: string; value?: number; reason?: string };
-  return NextResponse.json({
-    accepted: Boolean(body.recordId && body.reason && typeof body.value === 'number'),
-    revision: 5,
-    recordedAt: new Date().toISOString()
-  });
+  const body = await request.json() as {
+    batchId?: string;
+    resume?: boolean;
+    items?: Array<{ recordId?: string }>;
+  };
+  const batchId = body.batchId ?? 'BATCH-UNKNOWN';
+  const items = body.items ?? [];
+  const confirmedSet = confirmedByBatch.get(batchId) ?? new Set<string>();
+  const confirmed: string[] = [];
+  const skipped: string[] = [];
+  const failed: string[] = [];
+
+  for (const item of items) {
+    const recordId = item.recordId ?? '';
+    if (confirmedSet.has(recordId)) {
+      skipped.push(recordId);
+      continue;
+    }
+    // 模拟园区链路写入中断：非恢复模式下每批最多写入 2 条即失败，其余留待按批次恢复
+    if (!body.resume && confirmed.length >= 2) {
+      failed.push(recordId);
+      continue;
+    }
+    confirmedSet.add(recordId);
+    confirmed.push(recordId);
+  }
+  confirmedByBatch.set(batchId, confirmedSet);
+
+  const payload = batchResultSchema.parse({ batchId, confirmed, skipped, failed });
+  return NextResponse.json(payload, { status: failed.length > 0 ? 500 : 200 });
 }
